@@ -10,11 +10,15 @@ setup(
         'anndata',
         'pandas',
         'numpy',
+        'matplotlib',
+        'seaborn',
         'statsmodels',
         'scipy',
         'scikit-learn',
         'scanpy',
-        'squidpy'
+        'squidpy',
+        'spatialdata',
+        'joblib'
     ],
     # package_data={
     #     "drug2cell": ["*.pkl"]

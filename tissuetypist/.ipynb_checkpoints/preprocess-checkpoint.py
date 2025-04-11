@@ -3,90 +3,18 @@ import anndata
 import pandas as pd
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
+from typing import Optional, Tuple
+import warnings
 
-def prepare_dataframe(adata, # need to have XY coordinate in the adata.obsm['spatial']
-                      section_col,
-                      tissue_col=None,
-                      features='all'):
-    # get expression data
-    if features!='all':
-        data = adata[:,features].to_df()
-    else:
-        data = adata.to_df()
-    # coordinates
-    data[['x','y']] = adata.obsm['spatial'].copy()
-    # section
-    data['section'] = adata.obs[section_col].copy()
-    # tissue label
-    if tissue_col!=None:
-        data['tissue'] = adata.obs[tissue_col].copy()
-    return data # spot-or-window data in each row
+from . import load_data
+from . import annotate_edge
 
-def annotate_edge(data,                  # dataframe contains columns for "expression data","XY coordinates","tissue label" and "section ID"
-                  ratio_thresh,          # threshold of ratio of number of "close neighbours" to the value of non-edge spots
-                  plot=True              # plotting to check the annotation
-                 ): 
-    # Initialize new columns
-    data['ratio_close_neighbours'] = 0.0
-    data['is_edge'] = False
-    
-    # annotate "edge" data per section
-    for section, df in data.groupby('section'):
-        coords = df[['x','y']].values
-        
-        ### Compute cutoff distance to get "close neighbours" ###
-        # Detecting nearest‑neighbours for each data point
-        nbrs = NearestNeighbors(n_neighbors=6+1).fit(coords) # "+1" since this includes self data
-        # Get distances; first column will be the distance to self (0) and (n+1)th column has the distances to the n-th closest data point
-        distances, _ = nbrs.kneighbors(coords)
-        # Decide cutoff distance to get "close neighbours"
-        # Here, taking 95th percentile of the distances to the 6th closest data point. To avoid potential outlier
-        # So most of the spots will have more than 6 data points as "close neighbours"
-        cutoff = np.percentile(distances[:,6],95)
-        
-        ### Compute number of "close neighbours", and ratio of the value to the value of non-edge spot ###
-        # Count neighbours within that cutoff distance (radius search)
-        nbrs_radius = NearestNeighbors(radius=cutoff).fit(coords)
-        neighbours = nbrs_radius.radius_neighbors(coords, return_distance=False)
-        counts = np.array([len(ids) - 1 for ids in neighbours])  # number of "close neighbours". subtracting self 
-        # The 95th percentile value is likely to be a value for a non-edge spot, and at the same time ignoring potential outlier
-        # We can calculate the ratio of each data point using the 95th percentile value as reference
-        ratios = counts / np.percentile(counts,95)
-        
-        ### Annotate edge and write back into dataframe ###
-        data.loc[df.index, 'ratio_close_neighbours'] = ratios
-        data.loc[df.index, 'is_edge'] = ratios<ratio_thresh
-        
-        if plot:
-            df['is_edge'] = ratios < ratio_thresh
-            # prepare side-by-side plot
-            fig, axs = plt.subplots(ncols=2, figsize=(10, 5))
-            # Plot distribution of counts
-            axs[0].hist(counts,bins=max(counts)+1)
-            axs[0].set_title("Direct neighbour counts")
-            axs[0].set_xlabel("count")
-            axs[0].set_ylabel("n_spot")
-            # Plot interior vs edge
-            sns.scatterplot(
-                x='x', y='y', hue='is_edge', data=df, s=15,
-                palette={False: 'blue', True: 'red'},
-                ax=axs[1]
-            )
-            axs[1].set_title(f"Section {section} — Edge Detection (cutoff={cutoff:.2f})")
-            axs[1].set_xlabel("x")
-            axs[1].set_ylabel("y")
-            axs[1].legend(title="Is Edge?")
-            # Tight layout & show
-            plt.tight_layout()
-            plt.show()
-    
-    return data
-
-def include_neighbours(data, # dataframe contains columns for "expression data","XY coordinates","tissue label" and "section ID"
+# a helper function for "prepare_dataframe"
+def _include_neighbours(data, # dataframe contains columns for "expression data","XY coordinates","tissue label" and "section ID"
                        k = 6
                       ):
     # Take expression features
-    expression_features = [x for x in data.columns if x not in ['x','y','section','tissue','is_edge','ratio_close_neighbours']]
+    expression_features = [x for x in data.columns if '_own' in x]
     # Process each section separately
     augmented_data_list=[]
     for section, group_df in data.groupby('section'):
@@ -104,39 +32,109 @@ def include_neighbours(data, # dataframe contains columns for "expression data",
         distances, indices = nbrs.kneighbors(coords)
 
         # Compute summary statistics for each spot from its neighbors
-        neighbor_mean = np.zeros_like(X_gene)
         neighbor_max = np.zeros_like(X_gene)
-        neighbor_var = np.zeros_like(X_gene)
-
         for i in range(n_samples_section):
             neighbor_idx = indices[i][1:]  # Exclude the spot itself
             neighbor_values = X_gene[neighbor_idx, :]  # shape: (k_section, n_genes)
-            neighbor_mean[i, :] = neighbor_values.mean(axis=0)
             neighbor_max[i, :] = neighbor_values.max(axis=0)
-            neighbor_var[i, :] = neighbor_values.var(axis=0)
 
         # Combine original features with neighbor summary statistics
         # New features are: original, neighbor_mean, neighbor_max, neighbor_var
-        X_aug = np.hstack([X_gene, neighbor_mean, neighbor_max, neighbor_var])
+        X_aug = np.hstack([X_gene, neighbor_max])
 
         # Create a DataFrame for the augmented features for this section
         # Generate column names for neighbor stats for clarity
-        mean_cols = [f"{col}_mean" for col in expression_features]
-        max_cols = [f"{col}_max" for col in expression_features]
-        var_cols = [f"{col}_var" for col in expression_features]
-        all_feature_names = expression_features + mean_cols + max_cols + var_cols
-
+        max_cols = [col.replace('_own','_neighbour-max') for col in expression_features]
+        all_feature_names = expression_features + max_cols
         section_aug_df = pd.DataFrame(X_aug, columns=all_feature_names, index=spot_ids)
 
         # Add back the 'section', 'x', 'y', 'group', and 'is_edge' columns for later reference or splitting
         section_aug_df['section'] = section
         section_aug_df['x'] = group_df['x'].values
         section_aug_df['y'] = group_df['y'].values
-        section_aug_df['group'] = group_df['group'].values
-        section_aug_df['is_edge'] = group_df['is_edge'].values
-
+        if 'tissue' in group_df.columns:
+            section_aug_df['tissue'] = group_df['tissue'].values
+        
+        # append
         augmented_data_list.append(section_aug_df)
     
     # Combine all sections into one augmented DataFrame
     augmented_data = pd.concat(augmented_data_list)
     return augmented_data
+
+def preprocess_data(adata,
+                  section_col,
+                  coord_columns: Optional[Tuple[str, str]], # if None, need to have XY coordinate in the adata.obsm['spatial']
+                  tile_type='square', # 'hexagon' or 'square'
+                  remove_technical_edge=True,
+                  plot=False
+                 ):
+    # this is the function to prepare own and neighbour gene expression data and distance to edge.
+    
+    ### Get expression data (own features)
+    # will base on key_tissue_genes (HVGs+DEGs across tissues of the training dataset)
+    key_tissue_genes = load_data.key_tissue_genes()
+    shared = list(set(adata.var_names).intersection(key_tissue_genes))
+    if len(shared)==0:
+        raise ValueError("Error: no shared genes between adata and key_tissue_genes!")
+    else:
+        print(f'{len(shared)} genes will be used')
+    data = adata[:,shared].to_df()
+    data.columns = [f'{x}_own' for x in data.columns]
+    
+    ### Get section ID
+    data['section'] = adata.obs[section_col].copy()
+    
+    ### Get coordinates
+    if coord_columns==None:
+        data[['x','y']] = adata.obsm['spatial'].copy()
+    else:
+        data[['x','y']] = adata.obs[[coord_columns[0],coord_columns[1]]]
+    
+    ### Include neighbour data
+    data = _include_neighbours(data,k=6)
+    
+    ### Annotate edge
+    print("Calculating distance from tissue edge...")
+    data = annotate_edge.annotate_edge(data, # dataframe obtained by running "prepare_dataframe"
+                                      tile_type=tile_type, # 'hex' or 'sliding_window'
+                                      remove_technical_edge=remove_technical_edge,
+                                     plot=plot)
+    return data # spot-or-window data in each row
+
+def preprocess_reference_data(gene_panel,
+                           plot=False):
+    ### read in reference adata
+    adata = load_data.reference_adata()
+
+    ### subset feature based on the gene_panel of the query data
+    # subsetting needs to be before log-normalisation
+    if gene_panel!=None:
+        shared = list(set(adata.var_names).intersection(gene_panel))
+        if len(shared)==0:
+            raise ValueError("Error: no shared genes between adata and gene_panel!")
+        adata = adata[:,shared]
+        
+    ### filter & log-normalise
+    print("log-normalising...")
+    sc.pp.normalize_total(adata, target_sum=1e4)
+    sc.pp.log1p(adata)
+    
+    ### preprocess
+    data = preprocess_data(adata,
+                      section_col='sample',
+                      coord_columns=('array_col','array_row'),
+                      tile_type='square',
+                      remove_technical_edge=True,
+                      plot=plot
+                     )
+    
+    ### Get tissue label
+    data.loc[adata.obs_names,'tissue'] = adata.obs['annotation_final_mod'].copy()
+    
+    ### remove tissue-unassigned spots
+    data = data[data['tissue']!='unassigned']
+    
+    return data
+
+

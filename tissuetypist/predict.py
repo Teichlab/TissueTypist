@@ -10,11 +10,16 @@ from . import utils
 
 def predict(pipeline_path, query_df):
     # read in pipeline
+    print('loading model...')
     pipeline = joblib.load(pipeline_path)
     # Get the exact column order the pipeline expects
     cols = pipeline.named_steps["preprocessor"].feature_names_in_
     # Reindex (adds missing cols filled with 0, drops extras)
     X = query_df.reindex(columns=cols, fill_value=0)
+    print(f'number of features: {X.shape[1]}')
     # Predict and return
-    return pipeline.predict(X)
+    print(f'predicting...')
+    predicted_labels = pipeline.predict(X)
+    print(f'done!')
+    return predicted_labels
     
