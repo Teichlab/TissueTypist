@@ -259,6 +259,7 @@ def sliding_window_psudobulk(
 ):
     
     ### create slinding_windows
+    # this will add columns related to the assigned windows in the adata.obs
     if coord_columns!=None:
         _sliding_window(
             adata=adata,

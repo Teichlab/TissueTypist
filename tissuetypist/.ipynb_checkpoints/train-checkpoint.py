@@ -2,6 +2,7 @@ import scanpy as sc
 import anndata
 import pandas as pd
 import numpy as np
+import os
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler, FunctionTransformer
@@ -17,7 +18,6 @@ from . import utils
 def _build_pipeline(data,
                   own_features,
                   neighbour_features,
-                  edge_feature,
                   neighbour_weight,
                   edge_weight):
     # Build a ColumnTransformer: scale gene/neighbor features normally, and apply custom amplification for edge feature.
@@ -27,49 +27,84 @@ def _build_pipeline(data,
                     ("scale", StandardScaler()),
                     ("weight", utils.AmplifyTransformer(factor=neighbour_weight))
                 ]), neighbour_features),
-                ("edge_amp", utils.AmplifyTransformer(factor=edge_weight), [edge_feature])
+                ("edge_amp", utils.AmplifyTransformer(factor=edge_weight), ['distance_to_edge'])
             ])
     # Build the pipeline with the preprocessor and the logistic regression classifier.
     pipeline = Pipeline([
                 ('preprocessor', preprocessor),
-                ('classifier', LogisticRegression(max_iter=500, multi_class='multinomial', solver='lbfgs', C=0.01))
+                ('classifier', LogisticRegression(max_iter=500, solver='lbfgs', C=0.01))
             ])
     return pipeline
 
-def train(data,
+# train for a condition
+def _train(
+          data,
           own_features,
           neighbour_features,
-          edge_feature,
           neighbour_weight,
           edge_weight,
           tissue_col='group',
-          save_path=None
+          save_path_pipeline=None
          ):
     # build pipeline
     pipeline = _build_pipeline(data,
                               own_features,
                               neighbour_features,
-                               edge_feature,
                               neighbour_weight,
                               edge_weight)
     # prepare data
-    X_full_df = data[own_features+neighbour_features+[edge_feature]]
+    X_full_df = data[own_features+neighbour_features+['distance_to_edge']]
     y = data[tissue_col].values
     data[tissue_col] = data[tissue_col].astype('category')
     classes = list(data[tissue_col].cat.categories)
     # Fit the pipeline
     pipeline.fit(X_full_df, y)
     # save the model
-    if save_path!=None:
-        if save_path.endswith('.joblib'):
-            joblib.dump(pipeline,save_path)
-        else:
-            raise ValueError(f"Invalid save_path: '{save_path}'. File name must end with '.joblib'.")
+    if save_path_pipeline!=None:
+        joblib.dump(pipeline,save_path_pipeline)
 
+# main train function
+# train with three conditions: without spatial-info, neighbour-weight-0.3 and neighbour-weight-1
+def train(data,
+          tissue_col='tissue',
+          save_dir=None
+         ):
+    
+    # prepare the directory to save trained models
+    if save_dir!=None:
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        else:
+            print("Warning: This will overwrite the existing models.")
+            
+    # prepare features
+    own_features = [x for x in data.columns if '_own' in x]
+    neighbour_features = [x for x in data.columns if '_neighbour-max' in x]
+    
+    weight_pair_list = [(0.0, 0),
+                        (0.3, 5),
+                        (1.0, 5)]
+    # train per condition
+    for neighbour_weight,edge_weight in weight_pair_list:
+        print(f"Training...: weight to neighbour spots = {neighbour_weight}, weight to edge = {edge_weight}")
+        
+        if save_dir!=None:
+            save_path_pipeline = f"{save_dir}/weight2neighbours-{neighbour_weight}_weight2edge-{edge_weight}_pipeline.joblib"
+        else:
+            save_path_pipeline = None
+
+        _train(data,
+               own_features=own_features,
+               neighbour_features=neighbour_features,
+               neighbour_weight=neighbour_weight,
+               edge_weight=edge_weight,
+               tissue_col=tissue_col,
+               save_path_pipeline=save_path_pipeline
+                 )
+        
 def cross_validation(data,
                       own_features,
                       neighbour_features,
-                     edge_feature,
                       neighbour_weight,
                       edge_weight,
                       tissue_col='group',
@@ -78,11 +113,10 @@ def cross_validation(data,
     pipeline = _build_pipeline(data,
                               own_features,
                               neighbour_features,
-                               edge_feature,
                               neighbour_weight,
                               edge_weight)
     # prepare data
-    X_full_df = data[own_features+neighbour_features+[edge_feature]]
+    X_full_df = data[own_features+neighbour_features+['distance_to_edge']]
     y = data[tissue_col].values
     data[tissue_col] = data[tissue_col].astype('category')
     classes = list(data[tissue_col].cat.categories)

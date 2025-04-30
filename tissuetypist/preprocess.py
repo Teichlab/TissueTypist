@@ -8,6 +8,7 @@ import warnings
 
 from . import load_data
 from . import annotate_edge
+from . import sliding_window
 
 # a helper function for "prepare_dataframe"
 def _include_neighbours(data, # dataframe contains columns for "expression data","XY coordinates","tissue label" and "section ID"
@@ -62,34 +63,52 @@ def _include_neighbours(data, # dataframe contains columns for "expression data"
     augmented_data = pd.concat(augmented_data_list)
     return augmented_data
 
-def preprocess_data(adata,
+def preprocess(adata,
                   section_col,
                   coord_columns: Optional[Tuple[str, str]], # if None, need to have XY coordinate in the adata.obsm['spatial']
+               pseudobulk=False,
+               pseudobulk_window_size=None,
                   tile_type='square', # 'hexagon' or 'square'
                   remove_technical_edge=True,
                   plot=False
                  ):
-    # this is the function to prepare own and neighbour gene expression data and distance to edge.
+    # this is the function to making pseudobulk, prepare own and neighbour gene expression data, and calculate distance to edge.
+    
+    ### Pseudobulk per sliding_window, if requires
+    if pseudobulk:
+        print("Making pseudobulk per sliding_window...")
+        bdata = sliding_window.sliding_window_psudobulk(
+            adata=adata,
+            section_col=section_col,
+            window_size=pseudobulk_window_size,
+                coord_columns=coord_columns,
+                log_normalise=True
+            )
+        # update "coord_columns"
+        coord_columns = ('window_col','window_row')
+    else:
+        bdata = adata.copy()
     
     ### Get expression data (own features)
+    print("Preparing expression data...")
     # will base on key_tissue_genes (HVGs+DEGs across tissues of the training dataset)
     key_tissue_genes = load_data.key_tissue_genes()
-    shared = list(set(adata.var_names).intersection(key_tissue_genes))
+    shared = list(set(bdata.var_names).intersection(key_tissue_genes))
     if len(shared)==0:
         raise ValueError("Error: no shared genes between adata and key_tissue_genes!")
     else:
         print(f'{len(shared)} genes will be used')
-    data = adata[:,shared].to_df()
+    data = bdata[:,shared].to_df()
     data.columns = [f'{x}_own' for x in data.columns]
     
     ### Get section ID
-    data['section'] = adata.obs[section_col].copy()
+    data['section'] = bdata.obs[section_col].copy()
     
     ### Get coordinates
     if coord_columns==None:
-        data[['x','y']] = adata.obsm['spatial'].copy()
+        data[['x','y']] = bdata.obsm['spatial'].copy()
     else:
-        data[['x','y']] = adata.obs[[coord_columns[0],coord_columns[1]]]
+        data[['x','y']] = bdata.obs[[coord_columns[0],coord_columns[1]]]
     
     ### Include neighbour data
     data = _include_neighbours(data,k=6)
@@ -102,7 +121,7 @@ def preprocess_data(adata,
                                      plot=plot)
     return data # spot-or-window data in each row
 
-def preprocess_reference_data(gene_panel,
+def preprocess_builtin_reference(gene_panel,
                            plot=False):
     ### read in reference adata
     adata = load_data.reference_adata()
@@ -121,7 +140,7 @@ def preprocess_reference_data(gene_panel,
     sc.pp.log1p(adata)
     
     ### preprocess
-    data = preprocess_data(adata,
+    data = preprocess(adata,
                       section_col='sample',
                       coord_columns=('array_col','array_row'),
                       tile_type='square',
