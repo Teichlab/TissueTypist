@@ -11,4 +11,4 @@ pip install https://github.com/kazukane/TissueTypist.git
 ```
 
 ## Usage and Documentation
-**Please refer to the [demo notebooks](https://github.com/kazukane/TissueTypist/notebooks).**
+**Please refer to the [demo notebooks](https://github.com/kazukane/TissueTypist/tree/main/notebooks).**
