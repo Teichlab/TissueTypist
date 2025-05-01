@@ -126,9 +126,6 @@ def _sliding_window(
     if overlap < 0:
         raise ValueError("Overlap must be non-negative.")
 
-    if isinstance(adata):
-        adata = adata.table
-
     # we don't want to modify the original adata in case of copy=True
     if copy:
         adata = adata.copy()
