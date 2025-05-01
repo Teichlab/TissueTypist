@@ -3,7 +3,6 @@ from .predict import predict
 from .predict import prediction_to_adata
 from .preprocess import preprocess
 from .preprocess import preprocess_builtin_reference
-from .sliding_window import sliding_window_psudobulk
 from .train import train
 from .train import cross_validation
 from .utils import rank_genes_groups_with_mean
