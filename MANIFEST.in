@@ -1,0 +1,3 @@
+include tissuetipist/key_tissue_genes.txt
+include tissuetipist/visiumsd_oct_raw.h5ad
+recursive-include tissuetypist/trained_models_full *.joblib

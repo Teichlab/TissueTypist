@@ -20,9 +20,7 @@ setup(
         'spatialdata',
         'joblib'
     ],
-    # package_data={
-    #     "drug2cell": ["*.pkl"]
-    # },
+    include_package_data=True, # picks up MANIFEST.in
     author='Krzysztof Polanski, Kazumasa Kanemaru',
     # author_email='kp9@sanger.ac.uk',
     # license='non-commercial license'
