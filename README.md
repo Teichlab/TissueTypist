@@ -7,7 +7,7 @@ Creat a conda environment and install with pip
 ```
 conda create --name tissuetypist_env python=3.10
 conda activate tissuetypist_env
-pip install https://github.com/kazukane/TissueTypist.git
+pip install https://github.com/Teichlab/TissueTypist.git
 ```
 
 ## Usage and Documentation
