@@ -87,7 +87,7 @@ def _calculate_window_corners(
 # https://github.com/scverse/squidpy/blob/afcb8d0e81085a1af03ae5a9f299c5df00e95d61/src/squidpy/tl/_sliding_window.py
 # modified to output coordinates of each window
 def _sliding_window(
-    adata: AnnData | SpatialData,
+    adata: AnnData,
     library_key: str | None = None,
     window_size: int | None = None,
     overlap: int = 0,
@@ -126,7 +126,7 @@ def _sliding_window(
     if overlap < 0:
         raise ValueError("Overlap must be non-negative.")
 
-    if isinstance(adata, SpatialData):
+    if isinstance(adata):
         adata = adata.table
 
     # we don't want to modify the original adata in case of copy=True
