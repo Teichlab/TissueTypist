@@ -3,7 +3,7 @@ from anndata import AnnData
 import pandas as pd
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Any, Literal
 import warnings
 
 from itertools import product
@@ -17,6 +17,7 @@ from sklearn.preprocessing import MinMaxScaler
 from . import load_data
 
 # a helper function for "_sliding_window"
+# from squidpy (https://github.com/scverse/squidpy)
 # https://github.com/scverse/squidpy/blob/bdd989983cd24aaa46bbf4751f1e904fe10ecc44/src/squidpy/tl/_sliding_window.py#L178
 def _calculate_window_corners(
     min_x: int,
@@ -83,7 +84,7 @@ def _calculate_window_corners(
     return windows[["x_start", "x_end", "y_start", "y_end"]]
 
 # a helper function for "_sliding_window_psudobulk"
-# hugely based on the sliding_function in squidpy
+# hugely based on the sliding_function in squidpy (https://github.com/scverse/squidpy)
 # https://github.com/scverse/squidpy/blob/afcb8d0e81085a1af03ae5a9f299c5df00e95d61/src/squidpy/tl/_sliding_window.py
 # modified to output coordinates of each window
 def _sliding_window(
@@ -258,18 +259,42 @@ def _sliding_window(
 # this is a helper function for "preprocess"
 def _sliding_window_psudobulk(
     adata: AnnData,
-    section_col,
+    section_col: str,
     window_size: int,
-    coord_columns: Optional[Tuple[str, str]], # if None, need to have XY coordinate in the adata.obsm['spatial']
-    log_normalise=True
-):
-    
-    ### create slinding_windows
-    # this will add columns related to the assigned windows in the adata.obs
+    coord_columns: Optional[Tuple[str, str]] = None,
+    log_normalise: bool = True
+) -> AnnData:
+    """
+    Perform pseudobulk aggregation by sliding windows on spatial data.
+
+    Applies a sliding window assignment per spot based on coordinates,
+    then aggregates expression data per window, and optionally log-normalises.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data matrix with spatial coordinates in .obs or .obsm.
+    section_col : str
+        Column in adata.obs indicating section/library grouping.
+    window_size : int
+        Size of the sliding window (in same units as coordinates).
+    coord_columns : tuple of str, optional
+        Names of the x, y coordinate columns in adata.obs. If None,
+        coordinates are read from adata.obsm['spatial'] into 'globalX', 'globalY'.
+    log_normalise : bool, default True
+        If True, normalises counts to 10k per window and applies log1p.
+
+    Returns
+    -------
+    AnnData
+        Pseudobulked AnnData with aggregated counts in .X and
+        window metadata in .obs ('window_col', 'window_row', section_col).
+    """
+    # Assign sliding windows to data points
     if coord_columns!=None:
         _sliding_window(
             adata=adata,
-            library_key=section_col,  # only one section in the object
+            library_key=section_col,
             window_size=window_size,
             overlap=0,
             coord_columns=coord_columns,
@@ -278,7 +303,7 @@ def _sliding_window_psudobulk(
     else:
         _sliding_window(
             adata=adata,
-            library_key=section_col,  # only one section in the object
+            library_key=section_col,
             window_size=window_size,
             overlap=0,
             coord_columns=("globalX", "globalY"),
@@ -286,24 +311,31 @@ def _sliding_window_psudobulk(
             copy=False,  # we modify in place
         )
     
-    ### pseudobulk per window
-    # aggregate counts per window
-    bdata = sc.get.aggregate(adata, by='sliding_window_assignment', func=["sum"])
+    # Aggregate counts per window
+    bdata = sc.get.aggregate(
+        adata,
+        by='sliding_window_assignment',
+        func=['sum']
+    )
+    # Store summed counts in .X
     bdata.X = bdata.layers['sum'].copy()
 
-    # transfer important obs data
-    obs_sel = adata.obs[[section_col,'window_col','window_row','sliding_window_assignment']].copy()
-    obs_sel.drop_duplicates(inplace=True)
-    obs_sel.set_index('sliding_window_assignment',inplace=True)
-    bdata.obs[[section_col,'window_col','window_row']] = obs_sel.loc[bdata.obs_names].values
+    # Transfer window metadata to pseudobulk AnnData
+    obs = adata.obs[[section_col,'window_col','window_row','sliding_window_assignment']].copy()
+    obs = obs.drop_duplicates().set_index('sliding_window_assignment')
+    bdata.obs[[section_col,'window_col','window_row']] = (
+        obs.loc[bdata.obs_names]
+        [[section_col, 'window_col', 'window_row']]
+        .values
+    )
 
-    # log-normalise
+    # Optional log-normalisation
     if log_normalise:
         sc.pp.normalize_total(bdata, target_sum=1e4)
         sc.pp.log1p(bdata)
-        print('Pseudobulk by summing per window and then log-normalising.')
+        print('Pseudobulk: summed per window and log-normalised.')
     else:
-        print('Pseudobulk by summing per window. The output is not normalised.')
+        print('Pseudobulk: summed per window without normalisation.')
               
     return bdata
 
@@ -381,235 +413,387 @@ def _include_neighbours(
     return augmented_data
 
 # this is a helper function for "_find_technical_edge"
-def _find_arithmetic_segments(series: pd.Series):
-    # Convert the Series values to a numpy array for easy slicing.
+def _find_arithmetic_segments(series: pd.Series) -> List[Any]:
+    """
+    Identify element IDs that belong to arithmetic subsequences of length >= 5 within a Series.
+
+    Scans the Series values where consecutive differences are equal (i.e., arithmetic sequences). Segments shorter than 5 are ignored.
+
+    Parameters
+    ----------
+    series : pd.Series
+        Input Series indexed by element IDs, containing numeric values.
+
+    Returns
+    -------
+    List[Any]
+        List of element IDs (from the Series index) that are part of any arithmetic
+        segment with length at least 5.
+    """
     values = series.values
-    # Get the element IDs (index) as a numpy array.
-    element_ids = series.index.to_numpy()
-    
-    arithmetic_segments = []  # Will hold tuples (segment_indices, common_diff)
+    ids = series.index.to_numpy()
     n = len(values)
     i = 0
+    arithmetic_ids: List[Any] = []
     
-    while i < n:
-        # Start a new subsequence from index i; must have at least 2 elements.
-        if i == n - 1:
-            break  # no pair available
-        # Determine the difference for this potential arithmetic sequence.
+    # Identify all maximal arithmetic segments
+    while i < n - 1:
+        # Compute initial difference for potential segment
         diff = values[i+1] - values[i]
         j = i + 1
-        # Extend the sequence as long as the difference is maintained.
+        # Extend segment while difference remains constant
         while j < n - 1 and (values[j+1] - values[j] == diff):
             j += 1
-        # Only consider subsequences of length at least 2.
-        if j - i + 1 >= 2:
-            # Save the corresponding element IDs from the index.
-            seg_ids = element_ids[i:j+1]
-            # arithmetic_segments.append((seg_ids, diff))
-            arithmetic_segments.append(seg_ids)
-        i = j + 1
-  
-    # get segments whose length are 5 or larger
-    result = []
-    for seg in arithmetic_segments:
-        if len(seg)>=5:
-            result = result + list(seg)
-    return result
+
+        segment_length = j - i + 1
+        if segment_length >= 5:
+            arithmetic_ids.extend(ids[i:j+1].tolist())
+
+        # Move to the next potential start
+        i = j
+
+    return arithmetic_ids
 
 # this is a helper function for "_annotate_edge"
-def _find_technical_edge(data):
-    # get ids which are at the four side
+def _find_technical_edge(data: pd.DataFrame) -> List[Any]:
+    """
+    Identify spot IDs that lie along technical edges of the spatial dataset.
+
+    Technical edges are defined as spots on the minimum or maximum x or y boundaries
+    that also form arithmetic progressions in the perpendicular coordinate of length >= 5.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame indexed by spot ID, containing numeric 'x' and 'y' coordinate columns.
+
+    Returns
+    -------
+    List[Any]
+        List of spot IDs that belong to arithmetic segments on any of the four spatial edges.
+    """
+    # Identify spots on each boundary
     x_max_ids = data.index[data['x']==data['x'].max()]
     x_min_ids = data.index[data['x']==data['x'].min()]
     y_max_ids = data.index[data['y']==data['y'].max()]
     y_min_ids = data.index[data['y']==data['y'].min()]
-    # get ids with arithmetic progression, at the four side 
-    xmax_ap_ids_list = _find_arithmetic_segments(data.loc[x_max_ids,'y'].sort_values())
-    xmin_ap_ids_list = _find_arithmetic_segments(data.loc[x_min_ids,'y'].sort_values())
-    ymax_ap_ids_list = _find_arithmetic_segments(data.loc[y_max_ids,'x'].sort_values())
-    ymin_ap_ids_list = _find_arithmetic_segments(data.loc[y_min_ids,'x'].sort_values())
+    # Find arithmetic segments (length >=5) along each edge
+    xmax_ap_ids = _find_arithmetic_segments(data.loc[x_max_ids,'y'].sort_values())
+    xmin_ap_ids = _find_arithmetic_segments(data.loc[x_min_ids,'y'].sort_values())
+    ymax_ap_ids = _find_arithmetic_segments(data.loc[y_max_ids,'x'].sort_values())
+    ymin_ap_ids = _find_arithmetic_segments(data.loc[y_min_ids,'x'].sort_values())
     # return
-    technical_edge_ids = xmax_ap_ids_list+xmin_ap_ids_list+ymax_ap_ids_list+ymin_ap_ids_list
+    technical_edge_ids = xmax_ap_ids + xmin_ap_ids + ymax_ap_ids + ymin_ap_ids
+    
     return technical_edge_ids
 
 # this is a helper function for "_annotate_edge"
-def _distance_to_edge(data,
-                     norm=True,
-                     log1p=True,
-                    ):
-    # Separate the edge spots from the others
-    edge_df = data[data['is_edge'] == True].copy()
-    non_edge_df = data[data['is_edge'] == False].copy()
+def _distance_to_edge(
+    data: pd.DataFrame,
+    norm: bool = True,
+    log1p: bool = True
+) -> pd.DataFrame:
+    """
+    Calculate and annotate each spot's distance to the nearest technical edge.
 
-    # Build the kNN reference using the edge spots
-    # Using n_neighbors=1 to get the single nearest edge spot for each query point
-    nbrs = NearestNeighbors(n_neighbors=1, algorithm='auto').fit(edge_df[['x', 'y']])
+    For spots marked as 'is_edge' in the DataFrame, distance is zero. For others,
+    uses kNN to find the nearest edge spot, computes Euclidean distance on 'x', 'y',
+    then optionally applies min-max normalization and a log1p transform with scaling.
 
-    # For each non-edge spot, find the nearest edge spot
-    distances, indices = nbrs.kneighbors(non_edge_df[['x', 'y']])
-    non_edge_df['distance_to_edge'] = distances.flatten()
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame indexed by spot ID, containing 'x', 'y' coordinates and a boolean
+        'is_edge' column indicating technical edge spots.
+    norm : bool, default True
+        If True, applies min-max normalization to the raw distances.
+    log1p : bool, default True
+        If True, scales distances by 10 and applies log1p transform.
 
-    # put them in the original dataframe
-    data.loc[non_edge_df.index,'distance_to_edge'] = non_edge_df['distance_to_edge']
-    data.loc[edge_df.index,'distance_to_edge'] = 0
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame with a new 'distance_to_edge' column of float distances.
+    """
+    # Split edge and non-edge spots
+    edge_mask = data['is_edge'] == True
+    edge_df = data.loc[edge_mask, ['x', 'y']].copy()
+    non_edge_df = data.loc[~edge_mask, ['x', 'y']].copy()
     
-    # min-max normalisation
+    # Build kNN using edge spots
+    nbrs = NearestNeighbors(n_neighbors=1, algorithm='auto')
+    nbrs.fit(edge_df.values)
+    
+    # Compute nearest-edge distance for non-edge spots
+    distances, _ = nbrs.kneighbors(non_edge_df.values)
+    data.loc[~edge_mask, 'distance_to_edge'] = distances.flatten()
+    data.loc[edge_mask, 'distance_to_edge'] = 0.0
+    
+    # Min-max normalization
     if norm:
         scaler = MinMaxScaler()
-        data['distance_to_edge'] = scaler.fit_transform(data['distance_to_edge'].to_numpy().reshape(-1, 1))
-
-    # transform distance
-    # scale --> log(1 + x)
+        data['distance_to_edge'] = scaler.fit_transform(
+            data[['distance_to_edge']]
+        ).flatten()
+        
+    # Optional log1p scaling: emphasize small epicardial distances
     if log1p:
-        data['distance_to_edge'] = data['distance_to_edge']*10 # this scale factor determines how much emphasis you want to have for a small difference at the epicardial side
-        data['distance_to_edge'] = np.log1p(data['distance_to_edge'])
-
+        data['distance_to_edge'] = np.log1p(data['distance_to_edge'] * 10)
+        
     return data
 
 # this is a helper function for "preprocess"
-def _annotate_edge(data, tile_type, remove_technical_edge, plot):
-    ### check 'title_type' argument
-    if tile_type not in ('hexagon','square'):
-        raise ValueError("Invalid title_type value. Expected 'hexagon' or 'square'.")
-    ### Initialize new columns
+def _annotate_edge(
+    data: pd.DataFrame,
+    tile_type: Literal['hexagon', 'square'],
+    remove_technical_edge: bool,
+    plot: bool = False
+) -> pd.DataFrame:
+    """
+    Annotate spatial spot data with neighbor counts, edge flags, and distances to edge.
+
+    For each section, computes the number of direct neighbors per spot based on grid topology,
+    flags spots on the technical edge, optionally removes technical-edge spots,
+    calculates distance to edge, and can plot distance maps.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame indexed by spot ID containing 'section', 'x', 'y' coordinate columns.
+    tile_type : {'hexagon', 'square'}
+        Grid topology determining neighbor counts (6 for hexagon, 4 for square).
+    remove_technical_edge : bool
+        If True, excludes spots on technical edges from being labeled as edges.
+    plot : bool, default False
+        If True, generates a scatter plot of distance-to-edge per section for QC.
+
+    Returns
+    -------
+    pd.DataFrame
+        Original DataFrame augmented with columns:
+        - 'n_neighbours': int number of direct neighbors
+        - 'is_edge': bool flag for edge spots
+        - 'distance_to_edge': float distance metric to nearest edge
+    """
+    # Validate tile_type
+    if tile_type not in ('hexagon', 'square'):
+        raise ValueError("Invalid tile_type. Expected 'hexagon' or 'square'.")
+    
+    # Initialize columns
     data['n_neighbours'] = np.nan
     data['is_edge'] = False
     data['distance_to_edge'] = np.nan
-    ### annotate "edge" data per section
+    
+    # Process each section separately
     for section, df in data.groupby('section'):
-        coords = df[['x','y']].values
-        if tile_type=='hexagon':
-            nbrs = NearestNeighbors(n_neighbors=6+1).fit(coords) # "+1" since this includes self data
-        else:
-            nbrs = NearestNeighbors(n_neighbors=4+1).fit(coords) # "+1" since this includes self data
-        # Get distances; first column will be the distance to self (0) and (n+1)th column has the distances to the n-th closest data point
-        distances, _ = nbrs.kneighbors(coords)
-        # Get reference distance: minimum distance between data points
-        ref_distance = np.min(distances[:,1])
-        # based on the ref_distance, count number of direct neighbours
-        # Set ratio (to ref_distance) threshold as 1.1. To accept minor variation of the distances to direct neighbours.
-        n_neighbour = ((distances[:,1:]/ref_distance)<1.1).sum(axis=1)
-        # Annotate edge and write back into dataframe
-        data.loc[df.index, 'n_neighbours'] = n_neighbour
-        if tile_type=='hexagon':
-            data.loc[df.index, 'is_edge'] = n_neighbour <= 4
-            df['is_edge'] = n_neighbour <= 4 # for plotting
-        else:
-            data.loc[df.index, 'is_edge'] = n_neighbour <= 3
-            df['is_edge'] = n_neighbour <= 3 # for plotting
-        # remove technical edge
+        coords = df[['x', 'y']].values
+        
+        # Determine neighbor count including self
+        n_neighbors = 7 if tile_type == 'hexagon' else 5
+        nbrs = NearestNeighbors(n_neighbors=n_neighbors, algorithm='auto')
+        nbrs.fit(coords)
+        distances, _ = nbrs.kneighbors(coords) # first column will be the distance to self (0) and (n+1)th column has the distances to the n-th closest data point
+        
+        # Reference distance is the smallest non-zero neighbor distance
+        ref_distance = np.min(distances[:, 1])
+        # Count neighbors within 10% of reference distance (excluding self). To accept minor variation of the distances to direct neighbours.
+        neighbour_counts = ((distances[:, 1:] / ref_distance) < 1.1).sum(axis=1)
+        
+        # Annotate neighbor counts
+        data.loc[df.index, 'n_neighbours'] = neighbour_counts
+        
+        # Flag edge spots based on neighbor threshold
+        threshold = 4 if tile_type == 'hexagon' else 3
+        edge_mask = neighbour_counts <= threshold
+        data.loc[df.index, 'is_edge'] = edge_mask
+        df_loc = df.copy()
+        df_loc['is_edge'] = edge_mask
+        
+        # Optionally remove technical-edge spots
         if remove_technical_edge:
-            technical_edge_ids = _find_technical_edge(df)
-            data.loc[technical_edge_ids, 'is_edge'] = False
-            df.loc[technical_edge_ids, 'is_edge'] = False # for plotting
-        # calculate distance to edge
-        df = _distance_to_edge(df,norm=True,log1p=True)
-        data.loc[df.index,'distance_to_edge'] = df['distance_to_edge']
-        # plot for checking
+            tech_ids = _find_technical_edge(df_loc)
+            data.loc[tech_ids, 'is_edge'] = False
+            df_loc.loc[tech_ids, 'is_edge'] = False
+        
+        # Calculate distance to edge and annotate
+        df_loc = _distance_to_edge(df_loc, norm=True, log1p=True)
+        data.loc[df_loc.index, 'distance_to_edge'] = df_loc['distance_to_edge']
+        
+        # Plot for quality control
         if plot:
             sns.scatterplot(
-                x='x',y='y',hue='distance_to_edge',data=df,
-                palette='rainbow_r',s=10
-           )
-            plt.legend(title='distance to edge\n(normalised)',bbox_to_anchor=(1, 1))
-            plt.xlabel("x")
-            plt.ylabel("y")
+                x='x', y='y', hue='distance_to_edge', data=df_loc,
+                palette='rainbow_r', s=10
+            )
+            plt.legend(
+                title='Distance to edge\n(normalised)',
+                bbox_to_anchor=(1, 1)
+            )
+            plt.xlabel('x')
+            plt.ylabel('y')
             plt.title(section)
             plt.show()
+
     return data
 
+def preprocess(
+    adata: AnnData,
+    section_col: str,
+    coord_columns: Optional[Tuple[str, str]] = None,
+    pseudobulk: bool = False,
+    pseudobulk_window_size: Optional[int] = None,
+    tile_type: Literal['hexagon', 'square'] = 'square',
+    remove_technical_edge: bool = True,
+    plot: bool = False
+) -> pd.DataFrame:
+    """
+    Prepare spatial transcriptomics data for analysis.
 
-def preprocess(adata,
-                  section_col,
-                  coord_columns: Optional[Tuple[str, str]], # if None, need to have XY coordinate in the adata.obsm['spatial']
-               pseudobulk=False,
-               pseudobulk_window_size=None,
-                  tile_type='square', # 'hexagon' or 'square'
-                  remove_technical_edge=True,
-                  plot=False
-                 ):
-    # this is the function to making pseudobulk, prepare own and neighbour gene expression data, and calculate distance to edge.
-    
-    ### Pseudobulk per sliding_window, if requires
+    Steps:
+    1. Optionally pseudobulk by sliding window aggregation.
+    2. Select key tissue genes and extract per-spot expression.
+    3. Include neighbor-based summary expression.
+    4. Annotate each spot/window with edge flags and distances.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Spatial AnnData containing gene expression and metadata.
+    section_col : str
+        Column in adata.obs indicating section/library grouping.
+    coord_columns : tuple of str, optional
+        Column names for x, y coordinates in adata.obs. If None,
+        spatial coordinates are taken from adata.obsm['spatial'].
+    pseudobulk : bool, default False
+        Whether to aggregate counts into pseudospots via sliding windows.
+    pseudobulk_window_size : int, optional
+        Window size for pseudobulk aggregation; required if pseudobulk=True.
+    tile_type : {'hexagon', 'square'}, default 'square'
+        Grid topology for neighbor and edge calculations.
+    remove_technical_edge : bool, default True
+        Whether to exclude technical-edge spots from edge labeling.
+    plot : bool, default False
+        If True, plot distance-to-edge maps for quality control.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame indexed by spot or window ID, containing:
+        - <gene>_own: original expression
+        - <gene>_neighbour-max: neighbor max expression
+        - section: section identifier
+        - x, y: coordinates
+        - n_neighbours: number of direct neighbors
+        - is_edge: edge flag
+        - distance_to_edge: transformed distance metric
+    """
+    # Step 1: Pseudobulk aggregation if requested
     if pseudobulk:
-        print("Making pseudobulk per sliding_window...")
+        if pseudobulk_window_size is None:
+            raise ValueError("pseudobulk_window_size must be provided when pseudobulk=True.")
+        print("Making pseudobulk per sliding window...")
         bdata = _sliding_window_psudobulk(
             adata=adata,
             section_col=section_col,
             window_size=pseudobulk_window_size,
-                coord_columns=coord_columns,
-                log_normalise=True
-            )
-        # update "coord_columns"
-        coord_columns = ('window_col','window_row')
+            coord_columns=coord_columns,
+            log_normalise=True
+        )
+        coord_columns = ('window_col', 'window_row')
     else:
         bdata = adata.copy()
     
-    ### Get expression data (own features)
+    # Step 2: Prepare expression data
     print("Preparing expression data...")
-    # will base on key_tissue_genes (HVGs+DEGs across tissues of the training dataset)
     key_tissue_genes = load_data.key_tissue_genes()
-    shared = list(set(bdata.var_names).intersection(key_tissue_genes))
-    if len(shared)==0:
-        raise ValueError("Error: no shared genes between adata and key_tissue_genes!")
+    shared_genes = list(set(bdata.var_names).intersection(key_tissue_genes))
+    if not shared_genes:
+        raise ValueError("No shared genes between AnnData and key_tissue_genes.")
+    print(f"{len(shared_genes)} genes will be used.")
+    expr_df = bdata[:, shared_genes].to_df()
+    expr_df.columns = [f"{g}_own" for g in expr_df.columns]
+    
+    # Step 3: Assemble DataFrame with metadata
+    data = expr_df.copy()
+    # Section IDs
+    data['section'] = bdata.obs[section_col].values
+    # Coordinates
+    if coord_columns is None:
+        coords = bdata.obsm['spatial']
+        data[['x', 'y']] = coords
     else:
-        print(f'{len(shared)} genes will be used')
-    data = bdata[:,shared].to_df()
-    data.columns = [f'{x}_own' for x in data.columns]
-    
-    ### Get section ID
-    data['section'] = bdata.obs[section_col].copy()
-    
-    ### Get coordinates
-    if coord_columns==None:
-        data[['x','y']] = bdata.obsm['spatial'].copy()
-    else:
-        data[['x','y']] = bdata.obs[[coord_columns[0],coord_columns[1]]]
-    
-    ### Include neighbour data
-    data = _include_neighbours(data,k=6)
-    
-    ### Annotate edge
-    print("Calculating distance from tissue edge...")
-    data = _annotate_edge(data, # dataframe obtained by running "prepare_dataframe"
-                          tile_type=tile_type, # 'hex' or 'sliding_window'
-                          remove_technical_edge=remove_technical_edge,
-                         plot=plot)
-    return data # spot-or-window data in each row
-
-def preprocess_builtin_reference(gene_panel,
-                           plot=False):
-    ### read in reference adata
-    adata = load_data.reference_adata()
-
-    ### subset feature based on the gene_panel of the query data
-    # subsetting needs to be before log-normalisation
-    if gene_panel!=None:
-        shared = list(set(adata.var_names).intersection(gene_panel))
-        if len(shared)==0:
-            raise ValueError("Error: no shared genes between adata and gene_panel!")
-        adata = adata[:,shared]
+        data[['x', 'y']] = bdata.obs[list(coord_columns)].values
         
-    ### filter & log-normalise
-    print("log-normalising...")
-    sc.pp.normalize_total(adata, target_sum=1e4)
-    sc.pp.log1p(adata)
+    # Step 4: Include neighbor summaries
+    data = _include_neighbours(data, k=6)
     
-    ### preprocess
-    data = preprocess(adata,
-                      section_col='sample',
-                      coord_columns=('array_col','array_row'),
-                      tile_type='square',
-                      remove_technical_edge=True,
-                      plot=plot
-                     )
-    
-    ### Get tissue label
-    data.loc[adata.obs_names,'tissue'] = adata.obs['annotation_final_mod'].copy()
-    
-    ### remove tissue-unassigned spots
-    data = data[data['tissue']!='unassigned']
-    
+    # Step 5: Annotate edge and distance metrics
+    print("Calculating distance from tissue edge...")
+    data = _annotate_edge(
+        data,
+        tile_type=tile_type,
+        remove_technical_edge=remove_technical_edge,
+        plot=plot
+    )
+
     return data
 
+def preprocess_builtin_reference(
+    gene_panel: Optional[Sequence[str]] = None,
+    plot: bool = False
+) -> pd.DataFrame:
+    """
+    Load and preprocess a built-in reference dataset.
 
+    Steps:
+    1. Load reference AnnData object from disk.
+    2. Optionally subset to genes in `gene_panel`.
+    3. Filter and log-normalise expression data.
+    4. Run main `preprocess` pipeline on reference.
+    5. Annotate with tissue labels and remove unassigned spots.
+
+    Parameters
+    ----------
+    gene_panel : sequence of str, optional
+        List of gene names to subset the reference dataset. If None, uses all genes.
+    plot : bool, default False
+        If True, generates QC plots during preprocessing.
+
+    Returns
+    -------
+    pd.DataFrame
+        Preprocessed reference DataFrame indexed by spot ID, including gene expression,
+        neighbor features, edge annotations, and tissue labels.
+    """
+    # Step 1: Load reference data
+    adata_ref: AnnData = load_data.reference_adata()
+    
+    # Step 2: Subset to gene panel if provided
+    if gene_panel is not None:
+        shared_genes = list(set(adata_ref.var_names).intersection(gene_panel))
+        if not shared_genes:
+            raise ValueError("No shared genes between reference and gene_panel.")
+        adata_ref = adata_ref[:, shared_genes]
+        
+    # Step 3: Filter and log-normalise
+    print("Log-normalising reference data...")
+    sc.pp.normalize_total(adata_ref, target_sum=1e4)
+    sc.pp.log1p(adata_ref)
+    
+    # Step 4: Main preprocessing pipeline
+    data = preprocess(
+        adata=adata_ref,
+        section_col='sample',
+        coord_columns=('array_col', 'array_row'),
+        pseudobulk=False,
+        pseudobulk_window_size=None,
+        tile_type='square',
+        remove_technical_edge=True,
+        plot=plot
+    )
+    
+    # Step 5: Annotate tissue labels and filter
+    data['tissue'] = adata_ref.obs['annotation_final_mod'].values
+    data = data[data['tissue'] != 'unassigned']
+    
+    return data
