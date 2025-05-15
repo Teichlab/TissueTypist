@@ -494,7 +494,7 @@ def _distance_to_edge(
     log1p: bool = True
 ) -> pd.DataFrame:
     """
-    Calculate and annotate each spot's distance to the nearest technical edge.
+    Calculate and annotate each spot's distance to the nearest tissue edge.
 
     For spots marked as 'is_edge' in the DataFrame, distance is zero. For others,
     uses kNN to find the nearest edge spot, computes Euclidean distance on 'x', 'y',
