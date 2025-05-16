@@ -1,4 +1,4 @@
-Metadata-Version: 2.2
+Metadata-Version: 2.4
 Name: TissueTypist
 Version: 0.0.1
 Summary: Tissue label transfer functions
@@ -15,6 +15,7 @@ Requires-Dist: scikit-learn
 Requires-Dist: scanpy
 Requires-Dist: squidpy
 Requires-Dist: spatialdata
+Requires-Dist: joblib
 Dynamic: author
 Dynamic: home-page
 Dynamic: requires-dist

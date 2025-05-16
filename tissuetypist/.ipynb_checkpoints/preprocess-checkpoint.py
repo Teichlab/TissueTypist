@@ -3,7 +3,7 @@ from anndata import AnnData
 import pandas as pd
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
-from typing import Optional, Tuple, List, Any, Literal
+from typing import Optional, Tuple, List, Any, Literal, Sequence
 import warnings
 
 from itertools import product
@@ -706,21 +706,19 @@ def preprocess(
     # Step 2: Prepare expression data
     print("Preparing expression data...")
     key_tissue_genes = load_data.key_tissue_genes()
-    shared_genes = list(set(bdata.var_names).intersection(key_tissue_genes))
+    shared_genes = [g for g in key_tissue_genes if g in bdata.var_names]
     if not shared_genes:
         raise ValueError("No shared genes between AnnData and key_tissue_genes.")
     print(f"{len(shared_genes)} genes will be used.")
-    expr_df = bdata[:, shared_genes].to_df()
-    expr_df.columns = [f"{g}_own" for g in expr_df.columns]
+    data = bdata[:, shared_genes].to_df()
+    data.columns = [f"{g}_own" for g in data.columns]
     
     # Step 3: Assemble DataFrame with metadata
-    data = expr_df.copy()
     # Section IDs
     data['section'] = bdata.obs[section_col].values
     # Coordinates
     if coord_columns is None:
-        coords = bdata.obsm['spatial']
-        data[['x', 'y']] = coords
+        data[['x', 'y']] = bdata.obsm['spatial']
     else:
         data[['x', 'y']] = bdata.obs[list(coord_columns)].values
         
@@ -766,23 +764,23 @@ def preprocess_builtin_reference(
         neighbor features, edge annotations, and tissue labels.
     """
     # Step 1: Load reference data
-    adata_ref: AnnData = load_data.reference_adata()
+    _adata_ref: AnnData = load_data.reference_adata()
     
     # Step 2: Subset to gene panel if provided
     if gene_panel is not None:
-        shared_genes = list(set(adata_ref.var_names).intersection(gene_panel))
+        shared_genes = list(set(_adata_ref.var_names).intersection(gene_panel))
         if not shared_genes:
             raise ValueError("No shared genes between reference and gene_panel.")
-        adata_ref = adata_ref[:, shared_genes]
+        _adata_ref = _adata_ref[:, shared_genes]
         
     # Step 3: Filter and log-normalise
     print("Log-normalising reference data...")
-    sc.pp.normalize_total(adata_ref, target_sum=1e4)
-    sc.pp.log1p(adata_ref)
+    sc.pp.normalize_total(_adata_ref, target_sum=1e4)
+    sc.pp.log1p(_adata_ref)
     
     # Step 4: Main preprocessing pipeline
     data = preprocess(
-        adata=adata_ref,
+        adata=_adata_ref,
         section_col='sample',
         coord_columns=('array_col', 'array_row'),
         pseudobulk=False,
@@ -793,7 +791,7 @@ def preprocess_builtin_reference(
     )
     
     # Step 5: Annotate tissue labels and filter
-    data['tissue'] = adata_ref.obs['annotation_final_mod'].values
+    data.loc[_adata_ref.obs_names,'tissue'] = _adata_ref.obs['annotation_final_mod'].copy()
     data = data[data['tissue'] != 'unassigned']
     
     return data
