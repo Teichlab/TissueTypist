@@ -15,6 +15,7 @@ import seaborn as sns
 from sklearn.preprocessing import MinMaxScaler
 
 from . import load_data
+from pathlib import Path
 
 # a helper function for "_sliding_window"
 # from squidpy (https://github.com/scverse/squidpy)
@@ -764,7 +765,10 @@ def preprocess_builtin_reference(
         neighbor features, edge annotations, and tissue labels.
     """
     # Step 1: Load reference data
-    _adata_ref: AnnData = load_data.reference_adata()
+    print("Downloading reference adata to the current directory")
+    sc.readwrite._download("https://www.dropbox.com/scl/fi/hdqr79hym4aj1nn4qb2ip/visiumsd_oct_raw.h5ad?rlkey=oqwsy2s8lx7r27cgqzoi8gjo3&st=szmb6xw5&dl=1", Path("visiumsd_oct_raw.h5ad"))
+    print("Reading in")
+    _adata_ref: AnnData = sc.read_h5ad("visiumsd_oct_raw.h5ad")
     
     # Step 2: Subset to gene panel if provided
     if gene_panel is not None:

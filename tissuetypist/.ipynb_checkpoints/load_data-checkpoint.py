@@ -1,18 +1,6 @@
 import pkg_resources
-import scanpy as sc
 import io
 import joblib
-
-def reference_adata():
-    '''
-    Load the reference data (collection of VisiumSD data) distributed with the package.
-    
-    Returns a anndata.
-    '''
-    #this picks up the anndata shipped with the package
-    stream = pkg_resources.resource_stream(__name__, 'visiumsd_oct_raw.h5ad')
-    adata_ref = sc.read_h5ad(stream)
-    return adata_ref
 
 def key_tissue_genes():
     '''
