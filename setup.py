@@ -4,7 +4,7 @@ setup(
     name='TissueTypist',
     version='0.0.1',
     description='Tissue label transfer functions',
-    url='https://github.com/kazukane/TissueTypist',
+    url='https://github.com/Teichlab/TissueTypist',
     packages=find_packages(exclude=['docs', 'notebooks']),
     install_requires=[
         'anndata',
