@@ -14,14 +14,14 @@ setup(
         'seaborn',
         'statsmodels',
         'scipy',
-        'scikit-learn',
+        'scikit-learn==1.5.2',
         'scanpy',
         'squidpy',
         'spatialdata',
         'joblib'
     ],
     include_package_data=True, # picks up MANIFEST.in
-    author='Krzysztof Polanski, Kazumasa Kanemaru',
+    author='Kazumasa Kanemaru, Krzysztof Polanski',
     # author_email='kp9@sanger.ac.uk',
     # license='non-commercial license'
 )

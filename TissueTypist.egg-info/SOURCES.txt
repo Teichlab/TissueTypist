@@ -13,7 +13,6 @@ tissuetypist/predict.py
 tissuetypist/preprocess.py
 tissuetypist/train.py
 tissuetypist/utils.py
-tissuetypist/visiumsd_oct_raw.h5ad
 tissuetypist/trained_models_full/weight2neighbours-0.0_weight2edge-0_pipeline.joblib
 tissuetypist/trained_models_full/weight2neighbours-0.3_weight2edge-5_pipeline.joblib
 tissuetypist/trained_models_full/weight2neighbours-1.0_weight2edge-5_pipeline.joblib
