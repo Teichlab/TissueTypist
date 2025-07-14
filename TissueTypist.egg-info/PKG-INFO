@@ -2,8 +2,8 @@ Metadata-Version: 2.4
 Name: TissueTypist
 Version: 0.0.1
 Summary: Tissue label transfer functions
-Home-page: https://github.com/kazukane/TissueTypist
-Author: Krzysztof Polanski, Kazumasa Kanemaru
+Home-page: https://github.com/Teichlab/TissueTypist
+Author: Kazumasa Kanemaru, Krzysztof Polanski
 Requires-Dist: anndata
 Requires-Dist: pandas
 Requires-Dist: numpy
@@ -11,7 +11,7 @@ Requires-Dist: matplotlib
 Requires-Dist: seaborn
 Requires-Dist: statsmodels
 Requires-Dist: scipy
-Requires-Dist: scikit-learn
+Requires-Dist: scikit-learn==1.5.2
 Requires-Dist: scanpy
 Requires-Dist: squidpy
 Requires-Dist: spatialdata

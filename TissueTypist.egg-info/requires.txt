@@ -5,7 +5,7 @@ matplotlib
 seaborn
 statsmodels
 scipy
-scikit-learn
+scikit-learn==1.5.2
 scanpy
 squidpy
 spatialdata
