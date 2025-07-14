@@ -4,11 +4,13 @@ A workflow for training a logistic regression model that leverages both intrinsi
 Its prediction pipeline is compatible with high-resolution spatial transcriptomics datasets (e.g., Visium HD, Xenium, MERFISH) via a pseudobulk strategy (right box).
 
 ## Installation
-Creat a conda environment and install with pip
+Creat a conda environment and install
 ```
 conda create --name tissuetypist_env python=3.10
 conda activate tissuetypist_env
-pip install git+https://github.com/Teichlab/TissueTypist.git
+git clone https://github.com/Teichlab/TissueTypist.git
+cd TissueTypist
+pip install .
 ```
 
 ## Usage and Documentation
