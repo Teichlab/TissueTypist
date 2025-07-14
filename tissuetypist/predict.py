@@ -20,8 +20,14 @@ def _predict(query_df,pipeline):
     # Predict and return
     print(f'predicting...')
     predicted_labels = pipeline.predict(X)
+    if hasattr(pipeline, "predict_proba"):
+        confidence_scores = pipeline.predict_proba(X).max(axis=1)  # max prob for predicted class
+    else: 
+        # If predict_proba does not exist (e.g., for some SVMs or custom models).
+        # TissueTypist is logistic regression model, so should have predict_proba.
+        confidence_scores = np.full(shape=predicted_labels.shape, fill_value=np.nan)
     print(f'done!')
-    return predicted_labels
+    return predicted_labels, confidence_scores
 
 def predict(query_df,
             pipeline_dir=None # if None, use the trained model for a full transcriptome dataset, which is included in this package.
@@ -46,8 +52,9 @@ def predict(query_df,
         print(f'##### {pipeline_name} #####')
         y_predict = _predict(query_df,pipeline)
         # store in the input dataframe
+        y_predict, y_conf = _predict(query_df, pipeline)
         query_df[f'predicted_labels_{pipeline_name}'] = y_predict.copy()
-    
+        query_df[f'confidence_scores_{pipeline_name}'] = y_conf.copy()
     return query_df
 
 def prediction_to_adata(adata,
@@ -58,16 +65,20 @@ def prediction_to_adata(adata,
                      ):
     # column which has the prediction results to transfer
     prediction_col = f'predicted_labels_weight2neighbours-{weight_neighbour}_weight2edge-{weight_edge}'
+    confidence_col = f'confidence_scores_weight2neighbours-{weight_neighbour}_weight2edge-{weight_edge}'
     
     # map if the query data is pseudobulk per sliding window
     if sliding_window_col!=None:
         # mapping dictionary
-        mapping_dict = query_df[prediction_col].to_dict()
+        mapping_dict_labels = query_df[prediction_col].to_dict()
+        mapping_dict_scores = query_df[confidence_col].to_dict()
         # map
         series = adata.obs[sliding_window_col].astype('str').copy()
-        adata.obs['tt_prediction'] = series.map(mapping_dict).fillna(series)
+        adata.obs['tt_prediction'] = series.map(mapping_dict_labels).fillna(series)
+        adata.obs['tt_score'] = series.map(mapping_dict_scores).fillna(series)
     else:
         adata.obs['tt_prediction'] = query_df[prediction_col].reindex(adata.obs_names)
+        adata.obs['tt_score'] = query_df[confidence_col].reindex(adata.obs_names)
 
     # check how many NaN
     print(f"{sum(adata.obs['tt_prediction'].isna())} data don't have a predicted result")
