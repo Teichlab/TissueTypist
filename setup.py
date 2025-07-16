@@ -15,8 +15,8 @@ setup(
         'statsmodels',
         'scipy',
         'scikit-learn==1.5.2',
-        'scanpy',
-        'squidpy',
+        'scanpy==1.11.2',
+        'squidpy==1.6.5',
         'spatialdata',
         'joblib'
     ],

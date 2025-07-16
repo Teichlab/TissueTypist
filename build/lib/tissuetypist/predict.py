@@ -50,9 +50,8 @@ def predict(query_df,
     for pipeline_name,pipeline in model_dict.items():
         # predict
         print(f'##### {pipeline_name} #####')
-        y_predict = _predict(query_df,pipeline)
-        # store in the input dataframe
         y_predict, y_conf = _predict(query_df, pipeline)
+        # store in the input dataframe
         query_df[f'predicted_labels_{pipeline_name}'] = y_predict.copy()
         query_df[f'confidence_scores_{pipeline_name}'] = y_conf.copy()
     return query_df
