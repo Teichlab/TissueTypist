@@ -8,7 +8,7 @@ TissueTypist documentation
 
 Add your content using ``reStructuredText`` syntax. See the
 `reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
+documentation for details. But that's for later, for now let's push something!
 
 
 Main workflow functions
