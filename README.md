@@ -19,6 +19,14 @@ The cardiac classifier is trained on Visium SD (3-prime + FFPE) and Visium HD
 reference data, with a YAML-driven hierarchy that you can extend or replace
 for other tissues.
 
+![Cardiac niche hierarchy](niche_tree.svg)
+
+*Hierarchical organisation of anatomical labels used for model training.
+Seven coarse-grained categories resolve into 21 fine-grained terminal
+niches. Coloured dots indicate which reference modalities (Visium SD
+3-prime, Visium SD FFPE, Visium HD FFPE) provide training data for each
+label.*
+
 ---
 
 ## Install
