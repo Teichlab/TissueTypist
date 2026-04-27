@@ -22,6 +22,8 @@ keywords:
   - MERFISH
 license: MIT
 repository-code: "https://github.com/Teichlab/TissueTypist"
+acknowledgments: >-
+  Documentation and code restructuring were assisted by Anthropic's Claude.
 preferred-citation:
   type: article
   title: "Developmental Dynamics of Human Cardiogenesis: A multi-omic reference and its disruption in Trisomy 21"

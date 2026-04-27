@@ -165,6 +165,10 @@ If you use TissueTypist, please cite:
 > bioRxiv 2025.
 > [https://www.biorxiv.org/content/10.1101/2024.04.29.591736v3](https://www.biorxiv.org/content/10.1101/2024.04.29.591736v3)
 
+## Acknowledgments
+
+Documentation and code restructuring were assisted by Anthropic's Claude.
+
 ## License
 
 MIT.
