@@ -1,0 +1,48 @@
+# Personal implementation notes (not part of public repo)
+CLAUDE.md
+
+# Data files (too large for GitHub)
+data/*.h5ad
+data/*.h5
+data/*.csv
+data/*.tsv
+
+# Results and model files (large, reproducible)
+results/
+
+# Logs
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Pytest / mypy / coverage
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+*.env
+environment.yml.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

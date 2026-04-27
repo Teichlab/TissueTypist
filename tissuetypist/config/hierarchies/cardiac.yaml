@@ -1,0 +1,236 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# TissueTypist — cardiac niche hierarchy (April 2026)
+#
+# Source of truth for the cardiac hierarchy used by
+# ``tissuetypist.training.hierarchical`` and
+# ``tissuetypist.prediction.hierarchical``. Loaded via
+# :func:`tissuetypist.config.hierarchy.load_hierarchy`.
+#
+# Changes since Mar 2026:
+#   • Atrium - Left / Right now exist in all three modalities; Transitional
+#     remains HD-only. The Atrium sub-model becomes a three-stage chain
+#     (Atrial myocardium / Endocardium-Atrial → LR / Transitional → Left / Right).
+#   • "Atrial myocardium - non-terminal category" is no longer present in obs;
+#     stage 1 of the Atrium chain now pools Left ∪ Right ∪ Transitional.
+#   • Term changes: Epicardium → Epicardial region; AV node → AV nodal region.
+#   • Column rename: niche_*_Mar2026 → niche_*_Apr2026.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: cardiac_Apr2026
+coarse_col: niche_coarse_Apr2026
+fine_col:   niche_fine_Apr2026
+
+description: >-
+  Cardiac tissue-niche hierarchy used for TissueTypist training and
+  prediction. Seven coarse niches; Epicardial region and Lymph node are
+  terminal (no Stage 2). Atrium uses a 3-stage chain; Pacemaker conduction
+  system and Vasculature use 2-stage chains; Ventricle and AV junction
+  are flat (single Stage 2 model).
+
+coarse_niches:
+  - Ventricle
+  - Atrium
+  - Pacemaker conduction system
+  - Epicardial region
+  - Vasculature
+  - AV junction
+  - Lymph node
+
+# Coarse niches that bypass Stage 2 entirely.
+terminal_coarse:
+  - Epicardial region
+  - Lymph node
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sub-models (ordered chain of classifier stages per non-terminal coarse niche)
+# ─────────────────────────────────────────────────────────────────────────────
+
+sub_models:
+
+  # ── Ventricle (single stage) ─────────────────────────────────────────────
+  - parent: Ventricle
+    stages:
+      - model_name: ventricle
+        classes:
+          - Ventricle - Compact
+          - Ventricle - Trabeculated
+          - VCS - Proximal
+          - VCS - Distal
+          - Endocardium - Ventricular
+        modalities: [sd3p, sd_ffpe, hd]
+        fallback_label: Ventricle
+
+  # ── AV junction (single stage) ───────────────────────────────────────────
+  - parent: AV junction
+    stages:
+      - model_name: avjunction
+        classes:
+          - AV ring
+          - Endocardial cushion - Valve
+        modalities: [sd3p, sd_ffpe, hd]
+        fallback_label: AV junction
+
+  # ── Atrium (three-stage chain) ───────────────────────────────────────────
+  # Stage 1: Atrial myocardium vs Endocardium - Atrial    (all 3 modalities)
+  # Stage 2: Atrium - LR vs Atrium - Transitional         (HD only: Transitional is HD-only)
+  # Stage 3: Atrium - Left vs Atrium - Right              (all 3 modalities)
+  - parent: Atrium
+    stages:
+      - model_name: atrium_split
+        classes:
+          - Atrial myocardium             # synthetic pooled intermediate
+          - Endocardium - Atrial
+        modalities: [sd3p, sd_ffpe, hd]
+        pool_from:
+          Atrial myocardium:
+            - Atrium - Left
+            - Atrium - Right
+            - Atrium - Transitional
+        route_classes_to_next:
+          - Atrial myocardium
+        fallback_label: Atrium
+
+      - model_name: atrium_transitional
+        classes:
+          - Atrium - LR                   # synthetic pooled intermediate
+          - Atrium - Transitional
+        modalities: [hd]
+        pool_from:
+          Atrium - LR:
+            - Atrium - Left
+            - Atrium - Right
+        route_classes_to_next:
+          - Atrium - LR
+        # Permissive routing: on low confidence, assume Atrium - LR and
+        # continue to stage 3 (Left vs Right). tt_low_conf still flags
+        # the spot. Rationale: Transitional is HD-only (limited training
+        # signal); the deeper Left-vs-Right prediction-with-uncertainty is
+        # more useful than stopping at the Atrial myocardium intermediate.
+        low_confidence_route: Atrium - LR
+        fallback_label: Atrial myocardium
+
+      - model_name: atrium_lr
+        classes:
+          - Atrium - Left
+          - Atrium - Right
+        modalities: [sd3p, sd_ffpe, hd]
+        fallback_label: Atrium - LR
+
+  # ── Pacemaker conduction system (two-stage chain) ────────────────────────
+  # Stage 1: Sinoatrial region vs AV nodal region    (sd3p + hd)
+  # Stage 2: Sinus horn / SA node - Head / Tail      (HD only)
+  - parent: Pacemaker conduction system
+    stages:
+      - model_name: pcs_split
+        classes:
+          - Sinoatrial region             # synthetic pooled intermediate
+          - AV nodal region
+        modalities: [sd3p, hd]
+        # Pool both the SD 3' explicit intermediate label and the three HD
+        # sub-regions into the synthetic "Sinoatrial region" class.
+        pool_from:
+          Sinoatrial region:
+            - "Sinoatrial region - non-terminal category"  # SD 3' explicit intermediate
+            - Sinus horn                                   # HD sub-regions
+            - SA node - Head
+            - SA node - Tail
+        route_classes_to_next:
+          - Sinoatrial region
+        fallback_label: Pacemaker conduction system
+
+      - model_name: pcs_sinoatrial
+        classes:
+          - Sinus horn
+          - SA node - Head
+          - SA node - Tail
+        modalities: [hd]
+        fallback_label: Sinoatrial region
+
+  # ── Vasculature (two-stage chain) ────────────────────────────────────────
+  # Stage 1: Great vessels / Coronary vessel / Connective tissue   (all 3)
+  # Stage 2: Great vessel vs Ductus arteriosus                     (sd3p + hd)
+  - parent: Vasculature
+    stages:
+      - model_name: vasc_split
+        classes:
+          - Great vessels                 # synthetic pooled intermediate
+          - Coronary vessel
+          - Connective tissue
+        modalities: [sd3p, sd_ffpe, hd]
+        pool_from:
+          Great vessels:
+            - Great vessel
+            - Ductus arteriosus
+        route_classes_to_next:
+          - Great vessels
+        fallback_label: Vasculature
+
+      - model_name: vasc_fine
+        classes:
+          - Great vessel
+          - Ductus arteriosus
+        # SD FFPE has no Ductus arteriosus spots — exclude from Stage 2b
+        # to avoid biasing the binary split.
+        modalities: [sd3p, hd]
+        fallback_label: Great vessels
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ground-truth label remap for evaluation metrics
+#
+# When TissueTypist pools multiple original fine labels into a single terminal
+# output label, the ground-truth column must be remapped to match before
+# computing precision / recall / confusion matrices.
+# ─────────────────────────────────────────────────────────────────────────────
+gt_label_remap:
+  Adventitia:          Connective tissue
+  Cardiac mesenchyme:  Connective tissue
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Curated colour palette for plots (confusion matrix, spatial, UMAP)
+#
+# Labels absent from this table fall back to tab20 iteration colours.
+# Includes the Apr2026 intermediate names (Atrium - LR) and the renamed
+# coarse/terminal labels (Epicardial region, AV nodal region).
+# ─────────────────────────────────────────────────────────────────────────────
+palette:
+  # ── Coarse niches ──────────────────────────────────────────────────────
+  Ventricle:                    "#1f77b4"
+  Atrium:                       "#d62728"
+  Pacemaker conduction system:  "#8c564b"
+  Epicardial region:            "#7f7f7f"
+  Vasculature:                  "#17becf"
+  AV junction:                  "#6b6ecf"
+  Lymph node:                   "#cedb9c"
+
+  # ── Ventricle leaves ───────────────────────────────────────────────────
+  Ventricle - Compact:          "#1f77b4"
+  Ventricle - Trabeculated:     "#aec7e8"
+  VCS - Proximal:               "#ff7f0e"
+  VCS - Distal:                 "#ffbb78"
+  Endocardium - Ventricular:    "#2ca02c"
+
+  # ── Atrium chain ───────────────────────────────────────────────────────
+  Atrial myocardium:            "#e06666"    # synthetic intermediate (stage 2a)
+  Atrium - LR:                  "#f2a297"    # synthetic intermediate (stage 2b)
+  Atrium - Left:                "#98df8a"
+  Atrium - Right:               "#d62728"
+  Atrium - Transitional:        "#ff9896"
+  Endocardium - Atrial:         "#9467bd"
+
+  # ── Pacemaker conduction system ────────────────────────────────────────
+  Sinoatrial region:            "#a0522d"    # intermediate (stage 2a)
+  Sinus horn:                   "#c5b0d5"
+  SA node - Head:               "#8c564b"
+  SA node - Tail:               "#c49c94"
+  AV nodal region:              "#e377c2"
+
+  # ── Vasculature ────────────────────────────────────────────────────────
+  Great vessels:                "#9acd32"    # synthetic intermediate (stage 2a)
+  Great vessel:                 "#bcbd22"
+  Ductus arteriosus:            "#dbdb8d"
+  Coronary vessel:              "#17becf"
+  Connective tissue:            "#9edae5"
+
+  # ── AV junction leaves ─────────────────────────────────────────────────
+  AV ring:                      "#6b6ecf"
+  Endocardial cushion - Valve:  "#b5cf6b"

@@ -1,0 +1,11 @@
+model,stage,n_spots,n_classes,n_genes,modalities
+coarse,1,46996,7,6292,"SD_3prime, SD_FFPE, HD_FFPE"
+ventricle,2,31311,5,7767,"SD_3prime, SD_FFPE, HD_FFPE"
+avjunction,2,2088,2,8648,"SD_3prime, SD_FFPE, HD_FFPE"
+atrium_split,2a,4690,2,8154,"SD_3prime, SD_FFPE, HD_FFPE"
+atrium_transitional,2b,4235,2,4987,HD_FFPE
+atrium_lr,2c,4135,2,8721,"SD_3prime, SD_FFPE, HD_FFPE"
+pcs_split,2a,721,2,6735,"SD_3prime, HD_FFPE"
+pcs_sinoatrial,2b,295,3,4453,HD_FFPE
+vasc_split,2a,6214,3,7847,"SD_3prime, SD_FFPE, HD_FFPE"
+vasc_fine,2b,4016,2,6653,"SD_3prime, HD_FFPE"

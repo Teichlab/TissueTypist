@@ -1,0 +1,7 @@
+{
+    "microns_per_pixel": {
+        "HEA_FOET14880396": 0.22128091524390184,
+        "CellTalkHHD_Human_13_BRC2757-2758-7": 0.13681106645913083
+    },
+    "target_spot_um": 55.0
+}

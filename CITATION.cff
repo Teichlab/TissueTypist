@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+title: TissueTypist
+message: >-
+  If you use this software, please cite the associated preprint.
+type: software
+authors:
+  - family-names: Kanemaru
+    given-names: Kazumasa
+  - name: "Teichmann Laboratory"
+abstract: >-
+  TissueTypist classifies tissue niches in spatial transcriptomics data.
+  It ships with a pre-trained cardiac classifier built on Visium SD
+  (3-prime + FFPE) and Visium HD reference data, and adapts to other
+  tissues via a single YAML hierarchy file.
+keywords:
+  - spatial transcriptomics
+  - tissue classification
+  - single-cell
+  - Visium
+  - VisiumHD
+  - Xenium
+  - MERFISH
+license: MIT
+repository-code: "https://github.com/Teichlab/TissueTypist"
+preferred-citation:
+  type: article
+  title: "Spatially resolved multiomics of human cardiac niches"
+  authors:
+    - family-names: Kanemaru
+      given-names: Kazumasa
+    - name: "et al."
+  year: 2024
+  journal: bioRxiv
+  doi: 10.1101/2024.04.29.591736
+  url: "https://www.biorxiv.org/content/10.1101/2024.04.29.591736v3"

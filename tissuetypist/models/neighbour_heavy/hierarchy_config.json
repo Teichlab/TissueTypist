@@ -1,0 +1,256 @@
+{
+  "schema_version": 2,
+  "hierarchy": {
+    "name": "cardiac_Apr2026",
+    "coarse_col": "niche_coarse_Apr2026",
+    "fine_col": "niche_fine_Apr2026",
+    "coarse_niches": [
+      "Ventricle",
+      "Atrium",
+      "Pacemaker conduction system",
+      "Epicardial region",
+      "Vasculature",
+      "AV junction",
+      "Lymph node"
+    ],
+    "terminal_coarse": [
+      "Epicardial region",
+      "Lymph node"
+    ],
+    "description": "Cardiac tissue-niche hierarchy used for TissueTypist v2 training and prediction. Seven coarse niches; Epicardial region and Lymph node are terminal (no Stage 2). Atrium uses a 3-stage chain; Pacemaker conduction system and Vasculature use 2-stage chains; Ventricle and AV junction are flat (single Stage 2 model).",
+    "sub_models": {
+      "Ventricle": {
+        "parent_coarse": "Ventricle",
+        "stages": [
+          {
+            "model_name": "ventricle",
+            "classes": [
+              "Ventricle - Compact",
+              "Ventricle - Trabeculated",
+              "VCS - Proximal",
+              "VCS - Distal",
+              "Endocardium - Ventricular"
+            ],
+            "modalities": [
+              "sd3p",
+              "sd_ffpe",
+              "hd"
+            ],
+            "route_classes_to_next": [],
+            "pipeline": "ventricle_pipeline.joblib",
+            "gene_list": "ventricle_gene_list.txt",
+            "fallback_label": "Ventricle",
+            "artifact_present": true
+          }
+        ]
+      },
+      "AV junction": {
+        "parent_coarse": "AV junction",
+        "stages": [
+          {
+            "model_name": "avjunction",
+            "classes": [
+              "AV ring",
+              "Endocardial cushion - Valve"
+            ],
+            "modalities": [
+              "sd3p",
+              "sd_ffpe",
+              "hd"
+            ],
+            "route_classes_to_next": [],
+            "pipeline": "avjunction_pipeline.joblib",
+            "gene_list": "avjunction_gene_list.txt",
+            "fallback_label": "AV junction",
+            "artifact_present": true
+          }
+        ]
+      },
+      "Atrium": {
+        "parent_coarse": "Atrium",
+        "stages": [
+          {
+            "model_name": "atrium_split",
+            "classes": [
+              "Atrial myocardium",
+              "Endocardium - Atrial"
+            ],
+            "modalities": [
+              "sd3p",
+              "sd_ffpe",
+              "hd"
+            ],
+            "route_classes_to_next": [
+              "Atrial myocardium"
+            ],
+            "pipeline": "atrium_split_pipeline.joblib",
+            "gene_list": "atrium_split_gene_list.txt",
+            "pool_from": {
+              "Atrial myocardium": [
+                "Atrium - Left",
+                "Atrium - Right",
+                "Atrium - Transitional"
+              ]
+            },
+            "fallback_label": "Atrium",
+            "artifact_present": true
+          },
+          {
+            "model_name": "atrium_transitional",
+            "classes": [
+              "Atrium - LR",
+              "Atrium - Transitional"
+            ],
+            "modalities": [
+              "hd"
+            ],
+            "route_classes_to_next": [
+              "Atrium - LR"
+            ],
+            "pipeline": "atrium_transitional_pipeline.joblib",
+            "gene_list": "atrium_transitional_gene_list.txt",
+            "pool_from": {
+              "Atrium - LR": [
+                "Atrium - Left",
+                "Atrium - Right"
+              ]
+            },
+            "low_confidence_route": "Atrium - LR",
+            "fallback_label": "Atrial myocardium",
+            "artifact_present": true
+          },
+          {
+            "model_name": "atrium_lr",
+            "classes": [
+              "Atrium - Left",
+              "Atrium - Right"
+            ],
+            "modalities": [
+              "sd3p",
+              "sd_ffpe",
+              "hd"
+            ],
+            "route_classes_to_next": [],
+            "pipeline": "atrium_lr_pipeline.joblib",
+            "gene_list": "atrium_lr_gene_list.txt",
+            "fallback_label": "Atrium - LR",
+            "artifact_present": true
+          }
+        ]
+      },
+      "Pacemaker conduction system": {
+        "parent_coarse": "Pacemaker conduction system",
+        "stages": [
+          {
+            "model_name": "pcs_split",
+            "classes": [
+              "Sinoatrial region",
+              "AV nodal region"
+            ],
+            "modalities": [
+              "sd3p",
+              "hd"
+            ],
+            "route_classes_to_next": [
+              "Sinoatrial region"
+            ],
+            "pipeline": "pcs_split_pipeline.joblib",
+            "gene_list": "pcs_split_gene_list.txt",
+            "pool_from": {
+              "Sinoatrial region": [
+                "Sinoatrial region - non-terminal category",
+                "Sinus horn",
+                "SA node - Head",
+                "SA node - Tail"
+              ]
+            },
+            "fallback_label": "Pacemaker conduction system",
+            "artifact_present": true
+          },
+          {
+            "model_name": "pcs_sinoatrial",
+            "classes": [
+              "Sinus horn",
+              "SA node - Head",
+              "SA node - Tail"
+            ],
+            "modalities": [
+              "hd"
+            ],
+            "route_classes_to_next": [],
+            "pipeline": "pcs_sinoatrial_pipeline.joblib",
+            "gene_list": "pcs_sinoatrial_gene_list.txt",
+            "fallback_label": "Sinoatrial region",
+            "artifact_present": true
+          }
+        ]
+      },
+      "Vasculature": {
+        "parent_coarse": "Vasculature",
+        "stages": [
+          {
+            "model_name": "vasc_split",
+            "classes": [
+              "Great vessels",
+              "Coronary vessel",
+              "Connective tissue"
+            ],
+            "modalities": [
+              "sd3p",
+              "sd_ffpe",
+              "hd"
+            ],
+            "route_classes_to_next": [
+              "Great vessels"
+            ],
+            "pipeline": "vasc_split_pipeline.joblib",
+            "gene_list": "vasc_split_gene_list.txt",
+            "pool_from": {
+              "Great vessels": [
+                "Great vessel",
+                "Ductus arteriosus"
+              ]
+            },
+            "fallback_label": "Vasculature",
+            "artifact_present": true
+          },
+          {
+            "model_name": "vasc_fine",
+            "classes": [
+              "Great vessel",
+              "Ductus arteriosus"
+            ],
+            "modalities": [
+              "sd3p",
+              "hd"
+            ],
+            "route_classes_to_next": [],
+            "pipeline": "vasc_fine_pipeline.joblib",
+            "gene_list": "vasc_fine_gene_list.txt",
+            "fallback_label": "Great vessels",
+            "artifact_present": true
+          }
+        ]
+      }
+    }
+  },
+  "coarse_pipeline": "coarse_pipeline.joblib",
+  "coarse_gene_list": "coarse_gene_list.txt",
+  "training_args": {
+    "neighbour_weight": 1.0,
+    "edge_weight": 5.0,
+    "feature_set": "deg_hvg",
+    "n_top_hvgs": 4000,
+    "deg_filters": {
+      "pval_adj": 0.05,
+      "min_logfc": 0.5,
+      "min_mean_expr": 0.5
+    }
+  },
+  "coarse_label_col": "niche_coarse_Apr2026",
+  "fine_label_col": "niche_fine_Apr2026",
+  "terminal_niches": [
+    "Epicardial region",
+    "Lymph node"
+  ]
+}

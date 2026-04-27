@@ -1,0 +1,11 @@
+model,n_genes
+coarse,6292
+ventricle,7767
+avjunction,8648
+atrium_split,8154
+atrium_transitional,4987
+atrium_lr,8721
+pcs_split,6735
+pcs_sinoatrial,4453
+vasc_split,7847
+vasc_fine,6653
