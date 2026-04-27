@@ -24,12 +24,14 @@ license: MIT
 repository-code: "https://github.com/Teichlab/TissueTypist"
 preferred-citation:
   type: article
-  title: "Spatially resolved multiomics of human cardiac niches"
+  title: "Developmental Dynamics of Human Cardiogenesis: A multi-omic reference and its disruption in Trisomy 21"
   authors:
+    - family-names: Cranley
+      given-names: James
     - family-names: Kanemaru
       given-names: Kazumasa
     - name: "et al."
-  year: 2024
+  year: 2025
   journal: bioRxiv
   doi: 10.1101/2024.04.29.591736
   url: "https://www.biorxiv.org/content/10.1101/2024.04.29.591736v3"

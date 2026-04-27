@@ -29,9 +29,6 @@ conda activate tissuetypist
 pip install -e ".[dev]"
 ```
 
-The shipped model presets are tracked with [Git LFS](https://git-lfs.com/);
-install once with `git lfs install` before cloning.
-
 Verify:
 
 ```bash
@@ -163,8 +160,9 @@ downstream (training, prediction, plotting) adapts automatically.
 
 If you use TissueTypist, please cite:
 
-> Kanemaru K. et al. *Spatially resolved multiomics of human cardiac niches*.
-> bioRxiv 2024.
+> Cranley J & Kanemaru K. et al. *Developmental Dynamics of Human
+> Cardiogenesis: A multi-omic reference and its disruption in Trisomy 21*.
+> bioRxiv 2025.
 > [https://www.biorxiv.org/content/10.1101/2024.04.29.591736v3](https://www.biorxiv.org/content/10.1101/2024.04.29.591736v3)
 
 ## License
