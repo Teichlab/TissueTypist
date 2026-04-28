@@ -105,16 +105,14 @@ and pass `--hierarchy my_tissue.yaml`.
 
 | Command | Purpose |
 |---|---|
-| `tissuetypist info` | List shipped presets + hierarchies; report install status. |
 | `tissuetypist predict` | Run prediction; writes `{prefix}_predicted.h5ad` + summary. |
 | `tissuetypist evaluate` | Predict + confusion matrix + spatial / UMAP / confidence plots. |
-| `tissuetypist train` | Train a new hierarchy (full-genome). Supports `--flat`, `--auto_infer`, or custom YAML. |
-| `tissuetypist train-panel` | Retrain for an imaging-based ST panel. |
-| `tissuetypist build-catalogue` | Shared-gene pool across 1–3 reference datasets. |
-| `tissuetypist pseudobulk-hd` | HD sliding-window pseudobulk (run once before HD training). |
-| `tissuetypist validate-hierarchy` | Schema + optional `obs` check for a hierarchy YAML. |
+| `tissuetypist train` | Train on your own reference data — any tissue. Supports `--flat`, `--auto_infer`, or a custom YAML hierarchy. |
+| `tissuetypist train-panel` | Retrain for an imaging-based ST panel (Xenium / MERFISH / CosMx). |
 
-Every subcommand has its own `--help`.
+Every subcommand has its own `--help`. For the full set of subcommands
+(including `info`, `build-catalogue`, `pseudobulk-hd`,
+`validate-hierarchy`), see [`docs/user-guide.md`](docs/user-guide.md).
 
 ---
 

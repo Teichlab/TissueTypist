@@ -275,3 +275,18 @@ Per-modality outputs:
 Colours come from the YAML's `palette:` section (see
 [docs/hierarchy.md](hierarchy.md)). Pass `--no_eval` to skip the
 metrics + confusion matrix on external data without ground truth.
+
+## CLI reference (full)
+
+| Command | Purpose |
+|---|---|
+| `tissuetypist info` | List shipped presets + hierarchies; report install status. |
+| `tissuetypist predict` | Run prediction; writes `{prefix}_predicted.h5ad` + summary. |
+| `tissuetypist evaluate` | Predict + confusion matrix + spatial / UMAP / confidence plots. |
+| `tissuetypist train` | Train on your own reference data — any tissue. Supports `--flat`, `--auto_infer`, or a custom YAML hierarchy. |
+| `tissuetypist train-panel` | Retrain for an imaging-based ST panel (Xenium / MERFISH / CosMx). |
+| `tissuetypist build-catalogue` | Build the shared-gene pool across 1–3 reference datasets. |
+| `tissuetypist pseudobulk-hd` | HD sliding-window pseudobulk (run once before HD training). |
+| `tissuetypist validate-hierarchy` | Schema + optional `obs` check for a hierarchy YAML. |
+
+Every subcommand has its own `--help`.
