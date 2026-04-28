@@ -308,6 +308,20 @@ def _run_train_panel(args: argparse.Namespace) -> int:
             )
             windows.write_h5ad(outdir / "query_windows.h5ad")
             logger.info("  query windows → %s", outdir / "query_windows.h5ad")
+
+            # Save the per-cell window assignment so callers can project
+            # window-level predictions back onto individual cells:
+            #     mapping = pd.read_csv(outdir / "query_cell_window_assignment.csv.gz",
+            #                           index_col=0)
+            #     adata.obs["sliding_window_assignment"] = mapping["sliding_window_assignment"]
+            #     adata = predict_adata(adata, hd_windows=adata_windows,
+            #                           sliding_window_col="sliding_window_assignment")
+            if "sliding_window_assignment" in adata_q.obs.columns:
+                mapping_path = outdir / "query_cell_window_assignment.csv.gz"
+                adata_q.obs[[sc_col, "sliding_window_assignment"]].to_csv(
+                    mapping_path, compression="gzip"
+                )
+                logger.info("  query cell→window mapping → %s", mapping_path)
     else:
         with open(args.gene_panel_txt) as f:
             gene_panel = [line.strip() for line in f if line.strip()]

@@ -1212,6 +1212,7 @@ def sliding_window_pseudobulk_cells(
     coords_obsm_key: str = "spatial",
     niche_col: Optional[str] = None,
     min_cells_per_window: int = 10,
+    sliding_window_key: Optional[str] = "sliding_window_assignment",
 ) -> AnnData:
     """
     Aggregate cell-level spatial transcriptomics data (Xenium, MERFISH, CosMx)
@@ -1229,10 +1230,21 @@ def sliding_window_pseudobulk_cells(
     coords_obsm_key : Key in obsm for (x, y) coordinates. Default "spatial".
     niche_col : obs column with niche labels (None to skip majority-vote).
     min_cells_per_window : Minimum cells per window. Default 10.
+    sliding_window_key :
+        Name of the obs column written *both* to the input ``adata`` (cells)
+        and to the returned windowed AnnData. Each cell receives the window
+        identifier of the window it falls in, or NaN if its window was
+        dropped (< ``min_cells_per_window``) or the cell is outside the
+        grid. Pass ``None`` to skip this side effect on the input adata.
+        Default ``"sliding_window_assignment"`` — matches the HD pipeline,
+        and lets ``predict_adata`` map window-level predictions back to
+        individual cells via the ``sliding_window_col=`` argument.
 
     Returns
     -------
-    AnnData with raw summed counts and window metadata.
+    AnnData with raw summed counts and window metadata. The input
+    ``adata.obs`` is also modified in place: a ``sliding_window_key``
+    column is added (unless ``sliding_window_key=None``).
     """
     import scipy.sparse as sp
 
@@ -1268,6 +1280,15 @@ def sliding_window_pseudobulk_cells(
     all_coords = adata.obsm[coords_obsm_key]
     all_niche = adata.obs[niche_col].values if niche_col is not None else None
     sections = adata.obs[section_col].unique()
+
+    # Per-cell window assignment for round-trip projection of window-level
+    # predictions back to cells. Cells in dropped windows / outside the grid
+    # remain None → become NaN in the obs column.
+    cell_window_assignment: Optional[np.ndarray] = (
+        np.full(adata.n_obs, None, dtype=object)
+        if sliding_window_key is not None
+        else None
+    )
 
     for section in sections:
         sec_idx = np.where(adata.obs[section_col].values == section)[0]
@@ -1305,6 +1326,11 @@ def sliding_window_pseudobulk_cells(
             col_idx = int(round((win.x_start - min_x_sec) / target_spot_um))
             row_idx = int(round((win.y_start - min_y_sec) / target_spot_um))
 
+            # Window identifier — used as the join key for cell ↔ window
+            # round-trip projection. Section-namespaced so it's unique
+            # globally even if window indices repeat across sections.
+            window_id = f"{section}_window_{n_win_section}"
+
             obs_dict: dict = {
                 section_col:      section,
                 "_n_cells":       n_cells,
@@ -1313,6 +1339,9 @@ def sliding_window_pseudobulk_cells(
                 "window_col_idx": col_idx,
                 "window_row_idx": row_idx,
             }
+            if sliding_window_key is not None:
+                obs_dict[sliding_window_key] = window_id
+                cell_window_assignment[global_idx] = window_id
             if niche_col is not None:
                 obs_dict[niche_col] = pd.Series(all_niche[in_win]).mode().iloc[0]
 
@@ -1336,6 +1365,18 @@ def sliding_window_pseudobulk_cells(
     pb = ad.AnnData(X=X, var=adata.var.copy(), obs=obs_df)
 
     pb.obsm["spatial"] = obs_df[["window_col", "window_row"]].to_numpy(dtype=np.float64)
+
+    # Write the cell → window mapping back to the input adata so callers can
+    # project window-level predictions onto individual cells via
+    # ``predict_adata(adata, hd_windows=pb, sliding_window_col=sliding_window_key)``.
+    if sliding_window_key is not None:
+        adata.obs[sliding_window_key] = cell_window_assignment
+        n_assigned = int(sum(v is not None for v in cell_window_assignment))
+        logger.info(
+            "Wrote cell → window mapping to adata.obs['%s']: "
+            "%d / %d cells assigned (rest fell in dropped windows or outside grid).",
+            sliding_window_key, n_assigned, adata.n_obs,
+        )
 
     logger.info(
         "Cell sliding-window pseudobulk complete: %d windows from %d cells "
